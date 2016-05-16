@@ -1,0 +1,138 @@
+---
+title: "course_project"
+author: "Chiang"
+date: '20160515'
+output: html_document
+---
+
+##Synopsis
+
+In this report I tried to predict the [testing data](http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv) using the basic decision tree and random forest algorithm built upon the [training data](http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv). Considering accuracy of basic `decision trees` and `random forests` on training data, I select `random forests` as the algorithm being used to predict, which has an expected error rate of `0.0023` . The result of prediction is shown at the end of the report.
+
+##settings
+
+```{r,message=FALSE,include=FALSE, warning=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(randomForest)
+set.seed(10000)
+```
+
+I tried to use method `rf` in `caret` package, but it took too long for training. Package `randomForest` is thus chosen to supplant.
+
+##Getting and cleaning the data
+
+download the data
+
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+split the training set at a 6:4 proportion
+
+```{r}
+inTrain <- createDataPartition(training$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ]
+myTesting <- training[-inTrain, ]
+```
+
+Remove NearZeroVariance and not meaningful variables
+
+```{r}
+nzv <- nearZeroVar(myTraining, saveMetrics=TRUE)
+myTraining <- myTraining[,nzv$nzv==FALSE]
+nzv<- nearZeroVar(myTesting,saveMetrics=TRUE)
+myTesting <- myTesting[,nzv$nzv==FALSE]
+myTraining <- myTraining[c(-1)]
+```
+
+Set an additional threshold of 50% NA to decide whether a variable is to be eliminated, apply to splitted training data sets.
+
+```{r}
+trainingV3 <- myTraining
+for(i in 1:length(myTraining)) {
+    if( sum( is.na( myTraining[, i] ) ) /nrow(myTraining) >= .5) {
+        for(j in 1:length(trainingV3)) {
+            if( length( grep(names(myTraining[i]), names(trainingV3)[j]) ) == 1)  {
+                trainingV3 <- trainingV3[ , -j]
+            }   
+        } 
+    }
+}
+
+myTraining <- trainingV3
+rm(trainingV3)
+
+clean1 <- colnames(myTraining)
+clean2 <- colnames(myTraining[, -58])  # remove the classe column
+myTesting <- myTesting[clean1]
+testing <- testing[clean2]  
+ 
+for (i in 1:length(testing) ) {
+  for(j in 1:length(myTraining)) {
+    if( length( grep(names(myTraining[i]), names(testing)[j]) ) == 1)  {
+      class(testing[j]) <- class(myTraining[i])
+    }      
+  }      
+}
+
+testing <- rbind(myTraining[2, -58] , testing)
+testing <- testing[-1,]
+
+```
+
+
+##Decision Trees
+
+```{r}
+set.seed(10000)
+dt <- rpart(classe ~ ., data=myTraining, method="class")
+fancyRpartPlot(dt)
+
+pdt <- predict(dt, myTesting, type = "class")
+
+confusionMatrix(pdt, myTesting$classe)
+
+
+```
+
+
+##Random Forests
+```{r}
+rf <- randomForest(classe ~ ., data=myTraining)
+prf <- predict(rf, myTesting, type = "class")
+confusionMatrix(prf, myTesting$classe)
+
+```
+
+##Expected error
+```{r}
+plot(rf)
+```
+
+The expected errors converge to `1`-`0.9977` = `0.0023`
+
+#Predicting Results on the Test Data
+
+According to the prominently better performance, the Random Forest algorithm is selected to predict the testing set as shown below.
+
+```{r}
+prediction <- predict(rf, testing, type = "class")
+prediction
+```
+
+
+
+
+
+
+
+
+
